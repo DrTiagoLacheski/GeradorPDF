@@ -1,0 +1,300 @@
+from fpdf import FPDF
+from datetime import datetime
+import tkinter as tk
+from tkinter import ttk, messagebox, filedialog
+import webbrowser
+import os
+
+class GeradorProcuraçãoApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Gerador de Procuração Jurídica")
+        self.root.geometry("800x600")
+        self.root.resizable(True, True)
+        
+        # Configuração de estilo
+        self.style = ttk.Style()
+        self.style.configure('TFrame', background='#f0f0f0')
+        self.style.configure('TLabel', background='#f0f0f0', font=('Helvetica', 11))
+        self.style.configure('TButton', font=('Helvetica', 10))
+        self.style.configure('TEntry', font=('Helvetica', 10))
+        self.style.configure('Header.TLabel', font=('Helvetica', 14, 'bold'))
+        self.style.configure('TCombobox', font=('Helvetica', 10))
+        
+        # Dados fixos do advogado
+        self.dados_advogado = {
+            "nome": "TIAGO LACHESKI SILVEIRA DE OLIVEIRA",
+            "estado_civil": "casado",
+            "profissao": "advogado",
+            "cpf": "017.353.012-56",
+            "rg": "13.437.948-0",
+            "oab_pr": "102.510",
+            "oab_ro": "11.124",
+            "endereco": "Av. Tancredo Neves nº 2.871, Bairro Centro, Machadinho D'Oeste/RO, CEP 76.868-000"
+        }
+        
+        self.criar_interface()
+    
+    def criar_interface(self):
+        # Frame principal
+        main_frame = ttk.Frame(self.root, padding="10")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Cabeçalho
+        header_frame = ttk.Frame(main_frame)
+        header_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        ttk.Label(header_frame, text="GERADOR DE PROCURAÇÃO JURÍDICA", style='Header.TLabel').pack()
+        ttk.Label(header_frame, text="Preencha os dados do outorgante (cliente):", style='TLabel').pack()
+        
+        # Frame de entrada de dados
+        form_frame = ttk.Frame(main_frame)
+        form_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Campos do formulário
+        campos = [
+            ("Nome completo do cliente:", "nome_completo", "entry"),
+            ("Profissão:", "profissao", "entry"),
+            ("CPF (apenas números):", "cpf", "entry"),
+            ("Endereço completo (Rua/Av., nº, bairro, cidade/UF, CEP):", "endereco", "entry")
+        ]
+        
+        self.entries = {}
+        for label, field, field_type in campos:
+            field_frame = ttk.Frame(form_frame)
+            field_frame.pack(fill=tk.X, pady=5, padx=5, anchor='w')
+            
+            lbl = ttk.Label(field_frame, text=label, style='TLabel')
+            lbl.pack(anchor='w', pady=(0, 2))
+            
+            entry_frame = ttk.Frame(field_frame)
+            entry_frame.pack(fill=tk.X, expand=True)
+            
+            if field_type == "entry":
+                entry = ttk.Entry(entry_frame, font=('Helvetica', 11))
+                entry.pack(fill=tk.X, expand=True)
+                
+                if field == 'cpf':
+                    entry.bind('<KeyRelease>', self.formatar_cpf_input)
+                
+                self.entries[field] = entry
+        
+        # Campo especial para estado civil (combobox)
+        field_frame = ttk.Frame(form_frame)
+        field_frame.pack(fill=tk.X, pady=5, padx=5, anchor='w')
+        
+        lbl = ttk.Label(field_frame, text="Estado civil:", style='TLabel')
+        lbl.pack(anchor='w', pady=(0, 2))
+        
+        entry_frame = ttk.Frame(field_frame)
+        entry_frame.pack(fill=tk.X, expand=True)
+        
+        estados_civis = ["Solteiro(a)", "Casado(a)", "Divorciado(a)", "Viúvo(a)", "Em união estável"]
+        self.estado_civil_var = tk.StringVar()
+        cb_estado_civil = ttk.Combobox(
+            entry_frame, 
+            textvariable=self.estado_civil_var,
+            values=estados_civis,
+            state="readonly",
+            font=('Helvetica', 11)
+        )
+        cb_estado_civil.pack(fill=tk.X, expand=True)
+        cb_estado_civil.set(estados_civis[0])  # Define o valor padrão
+        self.entries["estado_civil"] = cb_estado_civil
+        
+        # Frame de botões
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=10)
+        
+        btn_gerar = ttk.Button(button_frame, text="Gerar Procuração", command=self.gerar_procuração)
+        btn_gerar.pack(side=tk.LEFT, padx=5)
+        
+        btn_limpar = ttk.Button(button_frame, text="Limpar Campos", command=self.limpar_campos)
+        btn_limpar.pack(side=tk.LEFT, padx=5)
+        
+        btn_sair = ttk.Button(button_frame, text="Sair", command=self.root.quit)
+        btn_sair.pack(side=tk.RIGHT, padx=5)
+        
+        # Frame de status
+        status_frame = ttk.Frame(main_frame)
+        status_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        self.status_label = ttk.Label(status_frame, text="Preencha os dados e clique em 'Gerar Procuração'", style='TLabel')
+        self.status_label.pack()
+    
+    def formatar_cpf_input(self, event):
+        entry = self.entries['cpf']
+        text = entry.get()
+        
+        # Remove tudo que não é dígito
+        digits = ''.join(filter(str.isdigit, text))
+        
+        # Aplica a formatação
+        formatted = ''
+        for i in range(len(digits)):
+            if i in (3, 6):
+                formatted += '.'
+            elif i == 9:
+                formatted += '-'
+            if i < 11:
+                formatted += digits[i]
+        
+        # Atualiza o campo
+        entry.delete(0, tk.END)
+        entry.insert(0, formatted[:14])
+        
+        # Move o cursor para o final
+        entry.icursor(tk.END)
+    
+    def formatar_cpf(self, cpf_num):
+        # Remove caracteres não numéricos
+        cpf_num = ''.join(filter(str.isdigit, cpf_num))
+        # Formata no padrão 000.000.000-00
+        return f"{cpf_num[:3]}.{cpf_num[3:6]}.{cpf_num[6:9]}-{cpf_num[9:]}"
+    
+    def limpar_campos(self):
+        for field, widget in self.entries.items():
+            if isinstance(widget, ttk.Combobox):
+                widget.set("Solteiro(a)")  # Reseta para o valor padrão
+            else:
+                widget.delete(0, tk.END)
+        self.status_label.config(text="Campos limpos. Preencha os dados novamente.")
+    
+    def validar_dados(self):
+        dados = {}
+        for field, widget in self.entries.items():
+            if isinstance(widget, ttk.Combobox):
+                value = widget.get().strip()
+            else:
+                value = widget.get().strip()
+            
+            if not value:
+                messagebox.showerror("Erro", f"O campo '{field.replace('_', ' ').title()}' é obrigatório!")
+                return None
+            
+            if field == 'cpf':
+                # Validação básica de CPF (apenas tamanho)
+                cpf_limpo = ''.join(filter(str.isdigit, value))
+                if len(cpf_limpo) != 11:
+                    messagebox.showerror("Erro", "CPF deve conter 11 dígitos!")
+                    return None
+                dados[field] = self.formatar_cpf(value)
+            else:
+                dados[field] = value
+        
+        # Padroniza os dados
+        dados['nome_completo'] = dados['nome_completo'].upper()
+        dados['estado_civil'] = dados['estado_civil'].lower()
+        dados['profissao'] = dados['profissao'].lower()
+        
+        return dados
+    
+    def gerar_procuração(self):
+        dados_cliente = self.validar_dados()
+        if not dados_cliente:
+            return
+        
+        try:
+            # Cria o PDF
+            pdf = FPDF()
+            pdf.alias_nb_pages()
+            pdf.add_page()
+            
+            # Configurações gerais
+            page_width = pdf.w - 2 * pdf.l_margin
+            
+            # Header
+            pdf.set_font("Helvetica", 'B', 16)
+            pdf.cell(0, 10, "P R O C U R A Ç Ã O", ln=1, align='C')
+            pdf.ln(5)
+            
+            # Outorgante
+            pdf.set_font("Helvetica", 'B', 12)
+            pdf.cell(0, 7, "OUTORGANTE:", ln=1)
+            pdf.set_font("Helvetica", '', 12)
+            
+            texto_outorgante = f"{dados_cliente['nome_completo']}, brasileiro(a), {dados_cliente['estado_civil']}(a), {dados_cliente['profissao']}, devidamente inscrito(a) no CPF n.º {dados_cliente['cpf']}, residente e domiciliado(a) à {dados_cliente['endereco']}"
+            
+            pdf.multi_cell(0, 7, texto_outorgante)
+            pdf.ln(5)
+            
+            # Outorgado
+            pdf.set_font("Helvetica", 'B', 12)
+            pdf.cell(0, 7, "OUTORGADO:", ln=1)
+            pdf.set_font("Helvetica", '', 12)
+            
+            texto_outorgado = f"{self.dados_advogado['nome']}, brasileiro, {self.dados_advogado['estado_civil']}, {self.dados_advogado['profissao']}, inscrito no CPF sob o n.º {self.dados_advogado['cpf']}, RG n.º {self.dados_advogado['rg']}, SESP/PR, OAB/PR n.º {self.dados_advogado['oab_pr']}, e OAB/RO n.º {self.dados_advogado['oab_ro']}, com endereço profissional situado na {self.dados_advogado['endereco']}."
+            
+            pdf.multi_cell(0, 7, texto_outorgado)
+            pdf.ln(5)
+            
+            # Poderes
+            pdf.set_font("Helvetica", 'B', 12)
+            pdf.cell(0, 7, "PODERES GERAIS:", ln=1)
+            pdf.set_font("Helvetica", '', 12)
+            
+            poderes = "O outorgante nomeia os outorgados seus procuradores, concedendo-lhes os poderes inerentes da cláusula ad judicia et extra para o foro em geral, podendo promover quaisquer medidas judiciais ou administrativas, assinar termo, oferecer defesa, direta ou indireta, interpor recursos, ajuizar ações e conduzir os respectivos processos, solicitar, providenciar e ter acesso a documentos de qualquer natureza, sendo o presente instrumento de mandato oneroso e contratual, podendo substabelecer este a outrem, com ou sem reserva de poderes, a fim de praticar todos os demais atos necessários ao fiel desempenho deste mandato."
+            
+            pdf.multi_cell(0, 7, poderes)
+            pdf.ln(5)
+            
+            pdf.set_font("Helvetica", 'B', 12)
+            pdf.cell(0, 7, "PODERES ESPECIAIS:", ln=1)
+            pdf.set_font("Helvetica", '', 12)
+            
+            poderes_especiais = "A presente procuração outorga aos advogados acima descritos os poderes especiais para receber citação, confessar, reconhecer a procedência do pedido, transigir, desistir, renunciar ao direito sobre o qual se funda a ação, receber, dar quitação, firmar compromisso e assinar declaração de hipossuficiência econômica, em conformidade com o art. 105 da Lei 13.105/2015."
+            
+            pdf.multi_cell(0, 7, poderes_especiais)
+            pdf.ln(10)
+            
+            # Data e assinatura
+            data_atual = datetime.now().strftime("%d de %B de %Y").lower()
+            meses = {
+                "january": "janeiro", "february": "fevereiro", "march": "março",
+                "april": "abril", "may": "maio", "june": "junho",
+                "july": "julho", "august": "agosto", "september": "setembro",
+                "october": "outubro", "november": "novembro", "december": "dezembro"
+            }
+            for eng, pt in meses.items():
+                data_atual = data_atual.replace(eng, pt)
+            
+            pdf.set_font("Helvetica", '', 12)
+            pdf.cell(0, 7, f"Machadinho D'Oeste, {data_atual}.", ln=1)
+            pdf.ln(15)
+            
+            # Linha para assinatura
+            pdf.cell(0, 7, "___________________________", ln=1, align='C')
+            pdf.cell(0, 7, "OUTORGANTE", ln=1, align='C')
+            
+            # Footer
+            pdf.set_y(-15)
+            pdf.set_font("Helvetica", 'I', 8)
+            pdf.set_text_color(128)
+            pdf.cell(0, 10, f"Página {pdf.page_no()}/{{nb}}", align='C')
+            
+            # Pergunta onde salvar
+            nome_arquivo = f"Procuração_{dados_cliente['nome_completo'].replace(' ', '_')}.pdf"
+            file_path = filedialog.asksaveasfilename(
+                defaultextension=".pdf",
+                initialfile=nome_arquivo,
+                filetypes=[("PDF Files", "*.pdf"), ("All Files", "*.*")]
+            )
+            
+            if file_path:
+                pdf.output(file_path)
+                self.status_label.config(text=f"Procuração gerada com sucesso: {os.path.basename(file_path)}")
+                
+                # Pergunta se deseja abrir o arquivo
+                if messagebox.askyesno("Sucesso", "Procuração gerada com sucesso!\nDeseja abrir o arquivo agora?"):
+                    webbrowser.open(file_path)
+            else:
+                self.status_label.config(text="Geração cancelada pelo usuário.")
+        
+        except Exception as e:
+            messagebox.showerror("Erro", f"Ocorreu um erro ao gerar a procuração:\n{str(e)}")
+            self.status_label.config(text="Erro ao gerar procuração.")
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = GeradorProcuraçãoApp(root)
+    root.mainloop()
